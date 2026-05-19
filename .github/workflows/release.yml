@@ -1,0 +1,74 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Get version from commit count
+        id: version
+        shell: bash
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          SHORT=$(git rev-parse --short HEAD)
+          echo "version=1.0.$COUNT" >> $GITHUB_OUTPUT
+          echo "tag=v1.0.$COUNT" >> $GITHUB_OUTPUT
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
+
+      - name: Restore dependencies
+        run: dotnet restore CosmicLyrics/CosmicLyrics.csproj
+
+      - name: Build & Publish (self-contained)
+        run: |
+          dotnet publish CosmicLyrics/CosmicLyrics.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output publish/win-x64 `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Zip release artifact
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path publish/win-x64/* `
+            -DestinationPath "CosmicLyrics-${{ steps.version.outputs.tag }}-win-x64.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Cosmic Lyrics ${{ steps.version.outputs.tag }}"
+          body: |
+            ## Cosmic Lyrics ${{ steps.version.outputs.tag }}
+
+            **Commit:** `${{ steps.version.outputs.short }}` — ${{ github.event.head_commit.message }}
+
+            ### Install
+            1. Download `CosmicLyrics-${{ steps.version.outputs.tag }}-win-x64.zip`
+            2. Extract anywhere
+            3. Run `CosmicLyrics.exe`
+
+            > Requires Windows 10/11. WebView2 is pre-installed on Windows 11; Windows 10 users may need the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+          files: "CosmicLyrics-${{ steps.version.outputs.tag }}-win-x64.zip"
+          draft: false
+          prerelease: false

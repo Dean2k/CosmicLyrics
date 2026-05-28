@@ -10,6 +10,7 @@ public class LyricLine : INotifyPropertyChanged
 
     public TimeSpan Timestamp { get; set; }
     public string Text { get; set; } = string.Empty;
+    public string RomanizedText { get; set; } = string.Empty;
     public string[] Words { get; set; } = Array.Empty<string>();
     public TimeSpan NextLineTimestamp { get; set; }
 

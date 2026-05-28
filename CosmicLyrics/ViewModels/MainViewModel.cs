@@ -23,6 +23,7 @@ public class MainViewModel : INotifyPropertyChanged
     private double _currentTime;
     private string _videoTitle = string.Empty;
     private bool _autoScrollEnabled = true;
+    private bool _showRomanized;
     private LyricLine? _centerLine;
 
     public ObservableCollection<LyricLine> DisplayedLyrics { get; } = new();
@@ -79,6 +80,12 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _autoScrollEnabled;
         set { _autoScrollEnabled = value; OnPropertyChanged(); }
+    }
+
+    public bool ShowRomanized
+    {
+        get => _showRomanized;
+        set { _showRomanized = value; OnPropertyChanged(); }
     }
 
     public LyricLine? CenterLine

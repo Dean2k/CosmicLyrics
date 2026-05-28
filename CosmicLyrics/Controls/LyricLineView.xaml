@@ -13,6 +13,9 @@
             <DoubleAnimation Storyboard.TargetName="MainText"
                              Storyboard.TargetProperty="Opacity"
                              From="0.4" To="1.0" Duration="0:0:0.25"/>
+            <DoubleAnimation Storyboard.TargetName="RomanizedTextBlock"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.3" To="0.85" Duration="0:0:0.25"/>
             <DoubleAnimation Storyboard.TargetName="GlowRect"
                              Storyboard.TargetProperty="Opacity"
                              From="0" To="1" Duration="0:0:0.35"/>
@@ -20,6 +23,9 @@
 
         <Storyboard x:Key="DeactivateAnimation">
             <DoubleAnimation Storyboard.TargetName="MainText"
+                             Storyboard.TargetProperty="Opacity"
+                             To="0.28" Duration="0:0:0.4"/>
+            <DoubleAnimation Storyboard.TargetName="RomanizedTextBlock"
                              Storyboard.TargetProperty="Opacity"
                              To="0.28" Duration="0:0:0.4"/>
             <DoubleAnimation Storyboard.TargetName="GlowRect"
@@ -43,15 +49,38 @@
 
         <Border x:Name="LineContainer" Padding="16,7" RenderTransformOrigin="0.5,0.5">
             <Border.RenderTransform><TranslateTransform Y="0"/></Border.RenderTransform>
-            <TextBlock x:Name="MainText"
-                       Text="{Binding Text, ElementName=Root}"
-                       FontFamily="Segoe UI"
-                       FontWeight="Bold"
-                       FontSize="18"
-                       Opacity="0.28"
-                       Foreground="White"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"/>
+            <StackPanel>
+                <TextBlock x:Name="MainText"
+                           Text="{Binding Text, ElementName=Root}"
+                           FontFamily="Segoe UI"
+                           FontWeight="Bold"
+                           FontSize="18"
+                           Opacity="0.28"
+                           Foreground="White"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Name="RomanizedTextBlock"
+                           Text="{Binding RomanizedText, ElementName=Root}"
+                           FontFamily="Segoe UI"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           Opacity="0.28"
+                           Foreground="#88AACC"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="0,2,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowRomanized, ElementName=Root}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

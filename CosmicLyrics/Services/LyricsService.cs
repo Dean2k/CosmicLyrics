@@ -41,11 +41,17 @@ public class LyricsService
                 // Fall back to plain lyrics displayed without timing
                 best = results.FirstOrDefault(r => !string.IsNullOrEmpty(r.PlainLyrics));
                 if (best?.PlainLyrics != null)
-                    return ParsePlainLyrics(best.PlainLyrics);
+                {
+                    var plainLyrics = ParsePlainLyrics(best.PlainLyrics);
+                    ApplyTransliteration(plainLyrics);
+                    return plainLyrics;
+                }
                 return null;
             }
 
-            return LrcParser.Parse(best.SyncedLyrics);
+            var lyrics = LrcParser.Parse(best.SyncedLyrics);
+            ApplyTransliteration(lyrics);
+            return lyrics;
         }
         catch (Exception ex)
         {
@@ -63,9 +69,17 @@ public class LyricsService
             var track = JsonConvert.DeserializeObject<LrcLibTrack>(response);
 
             if (track?.SyncedLyrics != null)
-                return LrcParser.Parse(track.SyncedLyrics);
+            {
+                var lyrics = LrcParser.Parse(track.SyncedLyrics);
+                ApplyTransliteration(lyrics);
+                return lyrics;
+            }
             if (track?.PlainLyrics != null)
-                return ParsePlainLyrics(track.PlainLyrics);
+            {
+                var lyrics = ParsePlainLyrics(track.PlainLyrics);
+                ApplyTransliteration(lyrics);
+                return lyrics;
+            }
             return null;
         }
         catch
@@ -101,6 +115,19 @@ public class LyricsService
                 : lines[i].Timestamp + TimeSpan.FromSeconds(4);
 
         return lines;
+    }
+
+    private static void ApplyTransliteration(List<LyricLine> lyrics)
+    {
+        if (lyrics == null || lyrics.Count == 0) return;
+
+        foreach (var line in lyrics)
+        {
+            if (TransliterationService.ContainsCjk(line.Text))
+            {
+                line.RomanizedText = TransliterationService.Romanize(line.Text);
+            }
+        }
     }
 
     private static int LevenshteinDistance(string a, string b)

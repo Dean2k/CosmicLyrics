@@ -16,6 +16,8 @@
         <!-- Lyric item template -->
         <DataTemplate x:Key="LyricItemTemplate">
             <controls:LyricLineView Text="{Binding Text}"
+                                    RomanizedText="{Binding RomanizedText}"
+                                    ShowRomanized="{Binding DataContext.ShowRomanized, RelativeSource={RelativeSource AncestorType=Window}}"
                                     IsActive="{Binding IsActive}"
                                     HorizontalAlignment="Center"/>
         </DataTemplate>
@@ -203,13 +205,24 @@
                     <!-- Status Bar -->
                     <Border Grid.Row="3" Padding="12,6" Background="#08080F">
                         <Grid>
-                            <TextBlock Text="{Binding StatusText}"
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding StatusText}"
                                        FontSize="11"
                                        Foreground="#446688AA"
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Romanized" FontSize="11" Foreground="#446688AA"
+                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <CheckBox IsChecked="{Binding ShowRomanized}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
                             <!-- Loading spinner (visible when loading) -->
-                            <Border x:Name="LoadingSpinner"
+                            <Border Grid.Column="2" x:Name="LoadingSpinner"
                                     Width="14" Height="14"
                                     HorizontalAlignment="Right"
                                     Visibility="{Binding IsLoadingLyrics, Converter={StaticResource BoolToVisibility}}">
@@ -245,6 +258,91 @@
 
                 <!-- RIGHT PANEL: Cosmic Lyric Display -->
                 <Grid Grid.Column="2">
+                    <!-- Animated aurora background behind lyrics -->
+                    <Grid.Background>
+                        <SolidColorBrush Color="#080612"/>
+                    </Grid.Background>
+                    <Rectangle x:Name="LyricsAuroraBg"
+                               IsHitTestVisible="False">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1" SpreadMethod="Reflect">
+                                <GradientStop x:Name="AuroraStop1" Color="#0A0820" Offset="0"/>
+                                <GradientStop x:Name="AuroraStop2" Color="#001530" Offset="0.25"/>
+                                <GradientStop x:Name="AuroraStop3" Color="#0D0028" Offset="0.5"/>
+                                <GradientStop x:Name="AuroraStop4" Color="#002020" Offset="0.75"/>
+                                <GradientStop x:Name="AuroraStop5" Color="#0A0820" Offset="1"/>
+                                <LinearGradientBrush.Transform>
+                                    <TransformGroup>
+                                        <ScaleTransform ScaleX="2" ScaleY="2"/>
+                                        <TranslateTransform x:Name="AuroraTranslate" X="0" Y="0"/>
+                                    </TransformGroup>
+                                </LinearGradientBrush.Transform>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                        <Rectangle.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <!-- Slow pan across the gradient -->
+                                        <DoubleAnimation Storyboard.TargetName="AuroraTranslate"
+                                                         Storyboard.TargetProperty="X"
+                                                         From="0" To="-400" Duration="0:0:20"
+                                                         AutoReverse="True">
+                                            <DoubleAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="AuroraTranslate"
+                                                         Storyboard.TargetProperty="Y"
+                                                         From="0" To="-300" Duration="0:0:25"
+                                                         AutoReverse="True">
+                                            <DoubleAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <!-- Color cycle: deep space -> blue nebula -> purple -> teal -> back -->
+                                        <ColorAnimation Storyboard.TargetName="AuroraStop2"
+                                                        Storyboard.TargetProperty="Color"
+                                                        From="#001530" To="#002868" Duration="0:0:12"
+                                                        AutoReverse="True">
+                                            <ColorAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut"/>
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="AuroraStop3"
+                                                        Storyboard.TargetProperty="Color"
+                                                        From="#0D0028" To="#280040" Duration="0:0:15"
+                                                        AutoReverse="True">
+                                            <ColorAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut"/>
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="AuroraStop4"
+                                                        Storyboard.TargetProperty="Color"
+                                                        From="#002020" To="#004848" Duration="0:0:10"
+                                                        AutoReverse="True">
+                                            <ColorAnimation.EasingFunction>
+                                                <SineEase EasingMode="EaseInOut"/>
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Rectangle.Triggers>
+                    </Rectangle>
+
+                    <!-- Particle overlay (stars drift across lyrics panel) -->
+                    <Rectangle x:Name="LyricsParticles"
+                               IsHitTestVisible="False"
+                               Opacity="0.4">
+                        <Rectangle.Fill>
+                            <RadialGradientBrush Center="0.5,0.5" RadiusX="0.6" RadiusY="0.6">
+                                <GradientStop Color="#00113344" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
                     <!-- The actual lyrics panel -->
                     <Grid>
                         <Grid.RowDefinitions>

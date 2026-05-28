@@ -51,15 +51,40 @@ public partial class MainWindow : Window
         """;
 
     // Ad/tracker domains to block at network level
+    // Expanded to cover most known YouTube/Google ad & tracking infrastructure
     private static readonly string[] BlockedDomains =
     {
+        // Google / DoubleClick core
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-        "googleads.g.doubleclick.net", "adservice.google.com",
-        "adservice.google.co.uk", "imasdk.googleapis.com",
-        "ads.youtube.com", "static.doubleclick.net",
+        "googleads.g.doubleclick.net", "adservice.google.",
         "pagead2.googlesyndication.com", "tpc.googlesyndication.com",
-        "yt3.ggpht.com/ytad", "youtube.com/pagead",
-        "youtube.com/api/stats/ads"
+        "static.doubleclick.net", "securepubads.g.doubleclick.net",
+        "pubads.g.doubleclick.net", "g.doubleclick.net",
+        "www.googleadservices.com",
+
+        // YouTube ads
+        "ads.youtube.com", "youtube.com/pagead", "youtube.com/api/stats/ads",
+        "/api/stats/ads", "/pagead", "/get_video_info?ad",
+
+        // IMA SDK / VAST
+        "imasdk.googleapis.com", "sdk.iad.google.com",
+        "googleusercontent.com/ads",
+
+        // Analytics / telemetry (reduces fingerprinting)
+        "google-analytics.com", "googletagmanager.com", "googletagservices.com",
+        "firebase.google.com", "analytics.google.com", "analytics.youtube.com",
+        "stats.g.doubleclick.net", "www.google-analytics.com",
+        "ssl.google-analytics.com", "googleoptimize.com",
+
+        // Other trackers
+        "facebook.com/tr", "connect.facebook.net", "google.com/pagead",
+        "google.com/aclk", "google.com/ads", "google.com/recaptcha/api.js",
+        "gstatic.com/ads", "gstatic.com/recaptcha",
+
+        // Generic ad patterns
+        "/adsense", "/adsystem", "/advertisement", "/advert", "/adserver",
+        "/bannerad", "/popunder", "/pop-up", "/tracking", "/telemetry",
+        "/metrics", "/log_event", "/clientlog", "/watchtime",
     };
 
     public MainWindow()
@@ -74,6 +99,100 @@ public partial class MainWindow : Window
         InitializeWebView();
     }
 
+    // This script runs BEFORE any page scripts on every document creation.
+    // It intercepts fetch/XHR responses and strips ad data, and also traps
+    // ytInitialPlayerResponse so ads are removed before YouTube's player reads them.
+    private const string AdBlockCoreScript = """
+        (function() {
+            if (window._cosmicAdBlockCore) return;
+            window._cosmicAdBlockCore = true;
+
+            function stripAds(text) {
+                if (!text || typeof text !== 'string') return text;
+                // Simple string replacement — same principle uBlock Origin uses
+                text = text.split('"adPlacements"').join('"no_ads"');
+                text = text.split('"adSlots"').join('"no_ads"');
+                text = text.split('"playerAds"').join('"no_ads"');
+                text = text.split('"adBreakHeartbeatParams"').join('"no_ads"');
+                return text;
+            }
+
+            // Hook fetch()
+            var _origFetch = window.fetch;
+            window.fetch = function(url, opts) {
+                var u = (url || '').toString();
+                var isYt = u.indexOf('youtube.com') !== -1 || u.indexOf('googlevideo.com') !== -1 || u.indexOf('youtubei') !== -1;
+                if (!isYt) return _origFetch.apply(this, arguments);
+                return _origFetch.apply(this, arguments).then(function(resp) {
+                    if (!resp.ok) return resp;
+                    var ct = (resp.headers.get('content-type') || '').toLowerCase();
+                    if (ct.indexOf('json') === -1 && ct.indexOf('text') === -1) return resp;
+                    return resp.text().then(function(body) {
+                        var clean = stripAds(body);
+                        return new Response(clean, { status: resp.status, statusText: resp.statusText, headers: resp.headers });
+                    });
+                });
+            };
+
+            // Hook XMLHttpRequest
+            var _origOpen = XMLHttpRequest.prototype.open;
+            var _origSend = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this._url = (url || '').toString();
+                return _origOpen.apply(this, arguments);
+            };
+            XMLHttpRequest.prototype.send = function() {
+                var xhr = this;
+                var url = xhr._url || '';
+                var isYt = url.indexOf('youtube.com') !== -1 || url.indexOf('googlevideo.com') !== -1 || url.indexOf('youtubei') !== -1;
+                if (!isYt) return _origSend.apply(this, arguments);
+                var _onReady = function() {
+                    if (xhr.readyState === 4 && xhr.responseType === '' && typeof xhr.responseText === 'string') {
+                        try {
+                            var clean = stripAds(xhr.responseText);
+                            Object.defineProperty(xhr, 'responseText', {value: clean, writable: true});
+                            Object.defineProperty(xhr, 'response', {value: clean, writable: true});
+                        } catch(e) {}
+                    }
+                };
+                xhr.addEventListener('readystatechange', _onReady);
+                return _origSend.apply(this, arguments);
+            };
+
+            // Trap ytInitialPlayerResponse so we can strip ads BEFORE the player reads it
+            var _ytInitialPlayerResponse = null;
+            Object.defineProperty(window, 'ytInitialPlayerResponse', {
+                configurable: true,
+                get: function() { return _ytInitialPlayerResponse; },
+                set: function(val) {
+                    if (val && typeof val === 'object') {
+                        try { delete val.adPlacements; } catch(e) {}
+                        try { delete val.playerAds; } catch(e) {}
+                        try { delete val.adSlots; } catch(e) {}
+                    }
+                    _ytInitialPlayerResponse = val;
+                }
+            });
+
+            // Also trap ytplayer.config.args.player_response if present
+            try {
+                var _pr = null;
+                Object.defineProperty(window, 'playerResponse', {
+                    configurable: true,
+                    get: function() { return _pr; },
+                    set: function(val) {
+                        if (val && typeof val === 'object') {
+                            try { delete val.adPlacements; } catch(e) {}
+                            try { delete val.playerAds; } catch(e) {}
+                            try { delete val.adSlots; } catch(e) {}
+                        }
+                        _pr = val;
+                    }
+                });
+            } catch(e) {}
+        })();
+        """;
+
     private async void InitializeWebView()
     {
         await YoutubePlayer.EnsureCoreWebView2Async();
@@ -84,6 +203,9 @@ public partial class MainWindow : Window
         // ── Ad blocker: block known ad/tracker domains at network level ──────
         wv.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         wv.WebResourceRequested += OnWebResourceRequested;
+
+        // Inject core ad-block script BEFORE any page scripts run (catches initial player data)
+        await wv.AddScriptToExecuteOnDocumentCreatedAsync(AdBlockCoreScript);
 
         wv.NavigationCompleted += OnNavigationCompleted;
         wv.WebMessageReceived += OnWebMessageReceived;
@@ -100,9 +222,14 @@ public partial class MainWindow : Window
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
         var uri = e.Request.Uri;
-        foreach (var domain in BlockedDomains)
+        foreach (var pattern in BlockedDomains)
         {
-            if (uri.Contains(domain, StringComparison.OrdinalIgnoreCase))
+            // Some patterns are path fragments (start with "/"), others are domains
+            bool match = pattern.StartsWith('/')
+                ? uri.Contains(pattern, StringComparison.OrdinalIgnoreCase)
+                : uri.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+
+            if (match)
             {
                 // Return empty 200 response — silently swallows the request
                 e.Response = YoutubePlayer.CoreWebView2.Environment.CreateWebResourceResponse(
@@ -118,30 +245,65 @@ public partial class MainWindow : Window
     {
         var wv = YoutubePlayer.CoreWebView2;
 
-        // Inject CSS to hide any ad UI that slipped through the network block
+        // ── 1. Inject comprehensive ad-block CSS ────────────────────────────────
         await wv.ExecuteScriptAsync(
     "(function() {" +
     "  var s = document.getElementById('_cosmicAdBlockCss');" +
     "  if (s) return;" +
     "  s = document.createElement('style');" +
     "  s.id = '_cosmicAdBlockCss';" +
-    "  s.textContent = '.ytp-ad-module, .ytp-ad-overlay-container, .ytp-ad-text-overlay, .ytp-ad-skip-button-container, .ytp-ad-player-overlay, .ytp-ad-progress, #masthead-ad, ytd-banner-promo-renderer, ytd-statement-banner-renderer, ytd-ad-slot-renderer, ytd-promoted-video-renderer, ytd-compact-promoted-video-renderer, ytd-display-ad-renderer, ytd-in-feed-ad-layout-renderer, #player-ads, ytd-action-companion-ad-renderer { display: none !important; }';" +
+    "  s.textContent = '" +
+    "    .ytp-ad-module,.ytp-ad-overlay-container,.ytp-ad-text-overlay," +
+    "    .ytp-ad-skip-button-container,.ytp-ad-player-overlay,.ytp-ad-progress," +
+    "    .ytp-ad-progress-list,.ytp-ad-feedback-dialog,.ytp-ad-info-hover-container," +
+    "    .ytp-ad-preview-container,.ytp-ad-message-container,.ytp-ad-timed-pie-countdown," +
+    "    .ytp-ad-duration-remaining,.ytp-ad-visit-advertiser-link," +
+    "    #masthead-ad,ytd-banner-promo-renderer,ytd-statement-banner-renderer," +
+    "    ytd-ad-slot-renderer,ytd-promoted-video-renderer," +
+    "    ytd-compact-promoted-video-renderer,ytd-display-ad-renderer," +
+    "    ytd-in-feed-ad-layout-renderer,tp-yt-paper-dialog[aria-label*=\\\"ad\\\" i]," +
+    "    .ytd-merch-shelf-renderer,#player-ads,ytd-action-companion-ad-renderer," +
+    "    ytd-popup-container,ytd-engagement-panel-section-list-renderer[panel-identifier=\\\"engagement-panel-ads\\\"]," +
+    "    ytd-engagement-panel-section-list-renderer[target-id=\\\"engagement-panel-ads\\\"]," +
+    "    .ytd-paid-promotion-overlay-renderer,.ytd-player-legacy-desktop-watch-ads-renderer," +
+    "    .ytd-video-masthead-ad-advanced-config-renderer,.ytd-video-masthead-ad-v3-renderer," +
+    "    #player-ads-container,.sparkles-light-cta,.sparkles-light-promotion," +
+    "    .video-ads,.ad-container,#ad-image-container,#ad-ytplayer," +
+    "    .ytp-ad-overlay-image,.ytp-ad-overlay-slot,.ytp-ad-overlay-video-masthead," +
+    "    .ytp-cards-teaser,.ytp-cards-button,.ytp-ce-element," +
+    "    .ytp-flyout-cta,.ytp-title-channel,.ytp-title,.ytp-pause-overlay," +
+    "    .ytp-cards-collection { display:none !important; }" +
+    "    .ad-showing .html5-main-video { opacity:1 !important; }'" +
+    "  ;" +
     "  document.head.appendChild(s);" +
     "})();");
 
-        // Auto-skip any video ad that manages to start
+        // ── 2. Inject ad UI skip/cleanup script ───────────────────────────────
         await wv.ExecuteScriptAsync(
             "(function() {" +
             "  if (window._cosmicAdSkipAttached) return;" +
             "  window._cosmicAdSkipAttached = true;" +
+            "" +
             "  setInterval(function() {" +
             "    var player = document.querySelector('.html5-video-player');" +
-            "    if (!player || !player.classList.contains('ad-showing')) return;" +
-            "    var skip = player.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button');" +
-            "    if (skip) { skip.click(); return; }" +
-            "    var vid = player.querySelector('video');" +
-            "    if (vid && vid.duration) vid.currentTime = vid.duration;" +
-            "  }, 300);" +
+            "    if (!player) return;" +
+            "" +
+            "    // Click skip-ad button as soon as it appears" +
+            "    var skip = player.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-skip-ad-button__text');" +
+            "    if (skip) skip.click();" +
+            "" +
+            "    // Close overlay ads" +
+            "    var closeBtn = player.querySelector('.ytp-ad-overlay-close-button, .ytp-ad-close-button');" +
+            "    if (closeBtn) closeBtn.click();" +
+            "" +
+            "    // Fast-forward in-stream video ads" +
+            "    if (player.classList.contains('ad-showing')) {" +
+            "      var vid = player.querySelector('video');" +
+            "      if (vid && vid.duration && isFinite(vid.duration)) {" +
+            "        try { vid.currentTime = vid.duration; } catch(e) {}" +
+            "      }" +
+            "    }" +
+            "  }, 250);" +
             "})();");
 
         // Time-sync bridge
@@ -315,6 +477,7 @@ public partial class MainWindow : Window
 
     private void CloseWindow_Click(object sender, RoutedEventArgs e)
         => Close();
+
 }
 
 

@@ -12,6 +12,14 @@ public partial class LyricLineView : UserControl
         DependencyProperty.Register(nameof(Text), typeof(string), typeof(LyricLineView),
             new PropertyMetadata(string.Empty));
 
+    public static readonly DependencyProperty RomanizedTextProperty =
+        DependencyProperty.Register(nameof(RomanizedText), typeof(string), typeof(LyricLineView),
+            new PropertyMetadata(string.Empty));
+
+    public static readonly DependencyProperty ShowRomanizedProperty =
+        DependencyProperty.Register(nameof(ShowRomanized), typeof(bool), typeof(LyricLineView),
+            new PropertyMetadata(false));
+
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(LyricLineView),
             new PropertyMetadata(false, OnIsActiveChanged));
@@ -20,6 +28,18 @@ public partial class LyricLineView : UserControl
     {
         get => (string)GetValue(TextProperty);
         set => SetValue(TextProperty, value);
+    }
+
+    public string RomanizedText
+    {
+        get => (string)GetValue(RomanizedTextProperty);
+        set => SetValue(RomanizedTextProperty, value);
+    }
+
+    public bool ShowRomanized
+    {
+        get => (bool)GetValue(ShowRomanizedProperty);
+        set => SetValue(ShowRomanizedProperty, value);
     }
 
     public bool IsActive
